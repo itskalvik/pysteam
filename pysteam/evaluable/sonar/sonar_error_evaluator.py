@@ -28,7 +28,7 @@ class SonarErrorEvaluator(Evaluable):
 
     def forward(self) -> Node:
         landmark_est = self._pt.forward()
-        value = np.sum(self._meas_pt - landmark_est.value)
+        value = self._meas_pt - landmark_est.value
 
         print("Landmark Est:\n", landmark_est.value)
         print("Landmark GT:\n", self._meas_pt)

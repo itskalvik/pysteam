@@ -28,7 +28,7 @@ class ComposeSonarLandmarkEvaluator(Evaluable):
     def __init__(self, transform: Evaluable, landmark: Evaluable):
         super().__init__()
         self._transform: Evaluable = transform # Sonar Pose (coincident with robot pose, T_wr)
-        self._landmark: Evaluable = landmark # landmark x, y, z in world frame (homogeneous coordinates)
+        self._landmark: Evaluable = landmark # landmark x, y, z in world frame P_w (homogeneous coordinates)
 
     @property
     def active(self) -> bool:
@@ -42,10 +42,10 @@ class ComposeSonarLandmarkEvaluator(Evaluable):
         transform_child = self._transform.forward()
         landmark_child = self._landmark.forward()
 
-        # Convert landmark from world frame to robot frame
+        # Convert landmark from world frame to robot frame P_r = T_rw P_w
         landmark_robot = transform_child.value.inverse().matrix() @ landmark_child.value
 
-        print("Forward")
+        print("\nForward")
         print("T_rw:\n", transform_child.value.inverse().matrix())
         print("P_w:\n", landmark_child.value)
         print("P_r:\n", landmark_robot)
