@@ -3,32 +3,14 @@ from pylgmath import se3op
 
 from ..evaluable import Evaluable, Jacobians, Node
 
-# https://stackoverflow.com/questions/2827393/angles-between-two-n-dimensional-vectors-in-python
-def unit_vector(vector):
-    """ Returns the unit vector of the vector.  """
-    return vector / np.linalg.norm(vector)
-
-def angle_between(v1, v2):
-    """ Returns the angle in radians between vectors 'v1' and 'v2'::
-
-            >>> angle_between((1, 0, 0), (0, 1, 0))
-            1.5707963267948966
-            >>> angle_between((1, 0, 0), (1, 0, 0))
-            0.0
-            >>> angle_between((1, 0, 0), (-1, 0, 0))
-            3.141592653589793
-    """
-    v1_u = unit_vector(v1)
-    v2_u = unit_vector(v2)
-    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
 class ComposeSonarLandmarkEvaluator(Evaluable):
-    """Evaluator for the composition of a transformation evaluator and sonar landmark state."""
+    """Evaluator for the composition of a transformation evaluator and landmark state."""
 
     def __init__(self, transform: Evaluable, landmark: Evaluable):
         super().__init__()
-        self._transform: Evaluable = transform # Sonar Pose (coincident with robot pose, T_wr)
-        self._landmark: Evaluable = landmark # landmark x, y, z in world frame P_w (homogeneous coordinates)
+        self._transform: Evaluable = transform
+        self._landmark: Evaluable = landmark
 
     @property
     def active(self) -> bool:
@@ -39,46 +21,24 @@ class ComposeSonarLandmarkEvaluator(Evaluable):
         return self._transform.related_var_keys | self._landmark.related_var_keys
 
     def forward(self) -> Node:
-        transform_child = self._transform.forward()
-        landmark_child = self._landmark.forward()
+        transform_child = self._transform.forward() # T_wr
+        landmark_child = self._landmark.forward() # P_w
 
-        # Convert landmark from world frame to robot frame P_r = T_rw P_w
-        landmark_robot = transform_child.value.inverse().matrix() @ landmark_child.value
-
-        print("\nForward")
-        print("T_rw:\n", transform_child.value.inverse().matrix())
-        print("P_w:\n", landmark_child.value)
-        print("P_r:\n", landmark_robot)
-
-        # Get angle between each axis and landmark
-        if np.sum(landmark_robot[:3]) > 0:
-            # Distance to point in robot frame
-            distance = np.linalg.norm(landmark_robot[:3, 0])
-            # Angle between x-axis and point (ideally the sonar angle)
-            theta = angle_between((1, 0, 0), landmark_robot[:3, 0])
-            # Angle between z-axis and point (ideally 1.5708, i.e., perpendicular to the robot's z-axis)
-            # Assuming that the robot's front direction is along the z-axis
-            gamma = angle_between((0, 0, 1), landmark_robot[:3, 0])
-        else:
-            # Base case if the estimated landmark is at [0, 0, 0, 1]
-            distance = 0.0
-            theta = 0.0
-            gamma = 0.0
-
-        value = np.array([distance,
-                          theta,
-                          gamma]).reshape(-1, 1)        
+        # P_r = T_wr^(-1).P_w
+        value = transform_child.value.inverse().matrix() @ landmark_child.value
 
         return Node(value, transform_child, landmark_child)
 
     def backward(self, lhs: np.ndarray, node: Node, jacs: Jacobians) -> None:
+        # T_wr, P_r
         transform_child, landmark_child = node.children
 
         if self._transform.active:
-            homogeneous = node.value
+            homogeneous = node.value # Output of forward pass P_w
             new_lhs = lhs @ se3op.point2fs(homogeneous)
             self._transform.backward(new_lhs, transform_child, jacs)
+            print("in")
 
         if self._landmark.active:
-            land_jac = transform_child.value.matrix()[:4, :3]
+            land_jac = transform_child.value.inverse().matrix()[:4, :3]
             self._landmark.backward(lhs @ land_jac, landmark_child, jacs)

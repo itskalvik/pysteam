@@ -29,10 +29,11 @@ class ComposeLandmarkEvaluator(Evaluable):
         return Node(value, transform_child, landmark_child)
 
     def backward(self, lhs: np.ndarray, node: Node, jacs: Jacobians) -> None:
+        # T_wr, P_r
         transform_child, landmark_child = node.children
 
         if self._transform.active:
-            homogeneous = node.value
+            homogeneous = node.value # Output of forward pass P_w
             new_lhs = lhs @ se3op.point2fs(homogeneous)
             self._transform.backward(new_lhs, transform_child, jacs)
 
